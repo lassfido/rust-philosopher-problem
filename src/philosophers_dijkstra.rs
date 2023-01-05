@@ -1,32 +1,33 @@
 use std::sync::mpsc::Receiver;
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::sync::{Arc, Mutex, mpsc, MutexGuard};
-use std::time::{Duration};
-#[cfg(debug_assertions)]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use rand::Rng;
 type Sender = mpsc::Sender<String>;
 
-pub fn run() -> ! {
+pub fn run(for_a_duration: Option<Duration>) -> () {
 
     let (philosophers, table, rx) = setup(6);
-    let _handles: Vec<_> = philosophers.into_iter().map(|philospher| {
-        let table = table.clone();
-        thread::spawn(move || {
-            loop {
-                philospher.think();
-                philospher.eat(&table);
-            }
-        })
-    }).collect();
-
+    let mut philo_workers = Option::Some(PhilosopherPool::new(philosophers, table));
+    let now = std::time::Instant::now();
     loop {
-        let received : String = rx.recv().unwrap_or_default();
-        println!("{}", received);
+        let received = rx.recv();
+        match received {
+            Ok(message) => println!("{}", message),
+            Err(_) => break,
+        }
+        match for_a_duration {
+            Some(duration) => {
+                if now.elapsed() > duration {
+                    drop(philo_workers.take())
+                }
+            },
+            None => continue,
+        }
     }
 }
 
-fn setup(number_of_philosophers: usize) -> (Vec<Philospher>, Arc<Table>, Receiver<String>) {
+fn setup(number_of_philosophers: usize) -> (Vec<Philosopher>, Arc<Table>, Receiver<String>) {
 
     let left = |index| {
         (index + number_of_philosophers - 1) % number_of_philosophers 
@@ -38,9 +39,9 @@ fn setup(number_of_philosophers: usize) -> (Vec<Philospher>, Arc<Table>, Receive
 
     let (tx, rx) = mpsc::channel();
 
-    let philosophers: Vec<Philospher> = (0..number_of_philosophers).map(|index| {
+    let philosophers: Vec<Philosopher> = (0..number_of_philosophers).map(|index| {
         let ctx = tx.clone();
-        Philospher::new(index, ctx, left(index), right(index))
+        Philosopher::new(index, ctx, left(index), right(index))
     }).collect();
 
     let table : Arc<Table> = Arc::new(Table {
@@ -58,16 +59,22 @@ struct Table {
 }
 
 #[derive(Debug)]
-struct Philospher {
+struct Philosopher {
     index: usize,
     transmitter: Sender,
     left: usize,
     right: usize,
 }
 
-impl Philospher {
+struct PhilosopherPool {
+    working_philosophers: Vec<Option<JoinHandle<()>>>,
+    sender: Option<mpsc::Sender<()>>,
+
+}
+
+impl Philosopher {
     fn new(index: usize, transmitter: Sender, left: usize, right: usize) -> Self {
-        Philospher { 
+        Philosopher { 
             index, 
             transmitter, 
             left,
@@ -111,3 +118,42 @@ impl Philospher {
 
 }
 
+impl PhilosopherPool {
+    fn new(philosophers: Vec<Philosopher>, table: Arc<Table>) -> Self {
+
+    let (sender, receiver) = mpsc::channel();
+    let receiver = Arc::new(Mutex::new(receiver));
+    let handles: Vec<_> = philosophers.into_iter().map(|philospher| {
+        let table = table.clone();
+        let receiver = receiver.clone(); 
+        Some(thread::spawn(move || {
+            loop {
+                philospher.think();
+                philospher.eat(&table);
+                match receiver.lock().unwrap().try_recv(){
+                    Ok(_) => (),
+                    Err(error) => {
+                        match error {
+                            mpsc::TryRecvError::Empty => continue,
+                            mpsc::TryRecvError::Disconnected => break,
+                        }
+                    }
+                }
+            }
+        }))
+        }).collect();
+        PhilosopherPool {
+            working_philosophers: handles,
+            sender: Some(sender)
+        }
+    }
+}
+
+impl Drop for PhilosopherPool {
+    fn drop(&mut self) {
+        drop(self.sender.take());
+        for handle in &mut self.working_philosophers {
+            handle.take().unwrap().join().expect("Error terminating thread");
+        }
+    }
+}
