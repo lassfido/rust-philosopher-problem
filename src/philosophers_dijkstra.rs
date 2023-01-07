@@ -8,21 +8,34 @@ use std::sync::mpsc::Receiver;
 use std::thread::{self, JoinHandle};
 use std::sync::{Arc, Mutex, mpsc, MutexGuard};
 use std::time::{Duration};
+use std::rc::Rc;
 use rand::Rng;
 
 type Sender = mpsc::Sender<State>;
 
 pub fn run(args: Option<PhilosopherArguments>) -> () {
 
-    let args = args.unwrap_or_default();
-    let (philosophers, table, rx) = setup(&args);
+    let mut args = args.unwrap_or_default();
+    let should_process: bool;
+    if args.state_sender.is_none() {
+        should_process = true;
+    }
+    else
+    {
+        should_process = false;
+    }
+    let (philosophers, table, rx) = setup(&mut args);
     let mut philo_workers = Option::Some(PhilosopherPool::new(philosophers, table));
+
+
     let now = std::time::Instant::now();
     loop {
-        let received = rx.recv();
-        match received {
-            Ok(message) => println!("{}", message),
-            Err(_) => break,
+        if should_process{
+            let received = rx.recv();
+            match received {
+                Ok(message) => println!("{}", message),
+                Err(_) => break,
+            }
         }
         match args.duration {
             Some(duration) => {
@@ -35,7 +48,7 @@ pub fn run(args: Option<PhilosopherArguments>) -> () {
     }
 }
 
-fn setup(args: &PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Receiver<State>) {
+fn setup(args: &mut PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Rc<Receiver<State>>) {
 
     let number_of_philosophers = args.number_of_philosophers as usize;
     let left = |index| {
@@ -47,9 +60,11 @@ fn setup(args: &PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Receiver
     };
 
     let (tx, rx) = mpsc::channel();
+    let sender = args.state_sender.take().unwrap_or(tx);
+
 
     let philosophers: Vec<Philosopher> = (0..number_of_philosophers).map(|index: usize| {
-        let ctx = tx.clone();
+        let ctx = sender.clone();
         Philosopher::new(index, ctx, 
             left(index), right(index), 
             args.range_in_ms.unwrap_or_else(|| {(0,1000)})
@@ -63,7 +78,7 @@ fn setup(args: &PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Receiver
         }
     );
 
-    (philosophers, table, rx)
+    (philosophers, table, Rc::new(rx))
 }
 
 struct Table {
