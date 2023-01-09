@@ -5,7 +5,7 @@ pub struct PhilosopherArguments {
     pub number_of_philosophers: i32,
     pub range_in_ms: Option<(u32,u32)>,
     pub duration: Option<Duration>,
-    pub state_sender: Option<mpsc::Sender<State>>,
+    pub state_sender: Option<mpsc::SyncSender<State>>,
 }
 
 pub enum State {

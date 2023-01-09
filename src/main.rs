@@ -5,7 +5,7 @@ use rust_philosopher_problem::run;
 use rust_philosopher_problem::general_functions::*;
 fn main() {
     let mut args = PhilosopherArguments::default();
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(0);
     args.range_in_ms = Some((1000, 5000));
     args.duration = Some(Duration::from_secs(5));
     args.state_sender = Some(tx);

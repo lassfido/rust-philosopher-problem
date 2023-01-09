@@ -11,7 +11,7 @@ use std::time::{Duration};
 use std::rc::Rc;
 use rand::Rng;
 
-type Sender = mpsc::Sender<State>;
+type Sender = mpsc::SyncSender<State>;
 
 pub fn run(args: Option<PhilosopherArguments>) -> () {
 
@@ -59,7 +59,7 @@ fn setup(args: &mut PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Rc<R
         (index + 1) % number_of_philosophers
     };
 
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(0);
     let sender = args.state_sender.take().unwrap_or(tx);
 
 
