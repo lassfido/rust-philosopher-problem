@@ -120,8 +120,25 @@ impl Philosopher {
     fn take_forks<'a>(&'a self, table: &'a Table) -> (MutexGuard<()>, MutexGuard<()>) {
         let activity = State::Waiting(StateMessage { index: self.index as i32, for_a_time: None });
         self.transmitter.send(activity).expect("Send failed");
-        let mut_guard_left = table.forks[self.left].lock().unwrap();
-        let mut_guard_right = table.forks[self.right].lock().unwrap();
+        let mut_guard_left_res = table.forks[self.left].lock();
+        let mut_guard_right_res = table.forks[self.right].lock();
+
+        let mut_guard_left = if let Ok(mut_guard_left) = mut_guard_left_res {
+            mut_guard_left
+        }
+        else
+        {
+            table.forks[self.left].lock().unwrap()
+        };
+        
+        let mut_guard_right = if let Ok(mut_guard_right) = mut_guard_right_res {
+            mut_guard_right
+        }
+        else
+        {
+            table.forks[self.right].lock().unwrap()
+        };
+        
         (mut_guard_left, mut_guard_right)
     }
 
