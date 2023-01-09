@@ -58,7 +58,7 @@ impl Display for State {
         match time{
 
             Some(time) => f.write_fmt(format_args!("Philosopher {index:>3} is {activity:<10} for {time:>5} ms", index=index, activity=state_string, time=time )),
-            None => f.write_fmt(format_args!("Philosopher {index:>3} is {activity:<10} waiting to eat", index=index, activity=state_string)),
+            None => f.write_fmt(format_args!("Philosopher {index:>3} is {activity:<10} to eat", index=index, activity=state_string)),
         }
         
         

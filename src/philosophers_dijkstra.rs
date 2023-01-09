@@ -51,9 +51,6 @@ pub fn run(args: Option<PhilosopherArguments>) -> () {
 fn setup(args: &mut PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Rc<Receiver<State>>) {
 
     let number_of_philosophers = args.number_of_philosophers as usize;
-    let left = |index| {
-        (index + number_of_philosophers - 1) % number_of_philosophers 
-    };
 
     let right = |index| {
         (index + 1) % number_of_philosophers
@@ -66,7 +63,7 @@ fn setup(args: &mut PhilosopherArguments) -> (Vec<Philosopher>, Arc<Table>, Rc<R
     let philosophers: Vec<Philosopher> = (0..number_of_philosophers).map(|index: usize| {
         let ctx = sender.clone();
         Philosopher::new(index, ctx, 
-            left(index), right(index), 
+            index, right(index), 
             args.range_in_ms.unwrap_or_else(|| {(0,1000)})
         )
     }).collect();
@@ -121,11 +118,8 @@ impl Philosopher {
     }
 
     fn take_forks<'a>(&'a self, table: &'a Table) -> (MutexGuard<()>, MutexGuard<()>) {
-        #[cfg(debug_assertions)]
-        {
-            let activity = State::Waiting(StateMessage { index: self.index as i32, for_a_time: None });
-            self.transmitter.send(activity).expect("Send failed");
-        }
+        let activity = State::Waiting(StateMessage { index: self.index as i32, for_a_time: None });
+        self.transmitter.send(activity).expect("Send failed");
         let mut_guard_left = table.forks[self.left].lock().unwrap();
         let mut_guard_right = table.forks[self.right].lock().unwrap();
         (mut_guard_left, mut_guard_right)
@@ -154,16 +148,16 @@ impl PhilosopherPool {
         Some(thread::spawn(move || {
             loop {
                 philospher.think();
-                philospher.eat(&table);
                 match receiver.lock().unwrap().try_recv(){
                     Ok(_) => (),
                     Err(error) => {
                         match error {
-                            mpsc::TryRecvError::Empty => continue,
+                            mpsc::TryRecvError::Empty => (),
                             mpsc::TryRecvError::Disconnected => break,
                         }
                     }
                 }
+                philospher.eat(&table);
             }
         }))
         }).collect();
