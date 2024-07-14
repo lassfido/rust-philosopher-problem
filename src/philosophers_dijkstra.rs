@@ -123,23 +123,8 @@ impl Philosopher {
         let mut_guard_left_res = table.forks[self.left].lock();
         let mut_guard_right_res = table.forks[self.right].lock();
 
-        let mut_guard_left = if let Ok(mut_guard_left) = mut_guard_left_res {
-            mut_guard_left
-        }
-        else
-        {
-            table.forks[self.left].lock().unwrap()
-        };
         
-        let mut_guard_right = if let Ok(mut_guard_right) = mut_guard_right_res {
-            mut_guard_right
-        }
-        else
-        {
-            table.forks[self.right].lock().unwrap()
-        };
-        
-        (mut_guard_left, mut_guard_right)
+        (mut_guard_left_res.expect("Could not aquire lock"), mut_guard_right_res.expect("Could not aquire lock"))
     }
 
     fn eat(&self, table: &Table) {
